@@ -1,12 +1,46 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { retrieveContext, RAGSource } from "@/app/lib/utils";
+import { retrieveContext } from "@/app/lib/retrieval";
+import type { RAGSource } from "@/app/lib/utils";
 import crypto from "crypto";
 import customerSupportCategories from "@/app/lib/customer_support_categories.json";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Provider: Groq when GROQ_API_KEY is set, otherwise Claude.
+const useGroq = !!process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const ANTHROPIC_MODEL =
+  process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+const BUSINESS_NAME = process.env.BUSINESS_NAME || "Atelier Systems";
+
+const client = useGroq
+  ? null
+  : new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+
+async function generateWithGroq(
+  system: string,
+  messages: { role: string; content: string }[],
+): Promise<string> {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      max_tokens: 1000,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: system }, ...messages],
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Groq request failed: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
 
 // Debug message helper function
 // Input: message string and optional data object
@@ -66,7 +100,8 @@ export async function POST(req: Request) {
   const measureTime = (label: string) => logTimestamp(label, apiStart);
 
   // Extract data from the request body
-  const { messages, model, knowledgeBaseId } = await req.json();
+  // The model is chosen on the server, so visitors can't switch to a pricier one.
+  const { messages, knowledgeBaseId } = await req.json();
   const latestMessage = messages[messages.length - 1].content;
 
   console.log("📝 Latest Query:", latestMessage);
@@ -78,7 +113,7 @@ export async function POST(req: Request) {
     debugMessage("🚀 API route called", {
       messagesReceived: messages.length,
       latestMessageLength: latestMessage.length,
-      anthropicKeySlice: process.env.ANTHROPIC_API_KEY?.slice(0, 4) + "****",
+      provider: useGroq ? "groq" : "anthropic",
     }),
   ).slice(0, MAX_DEBUG_LENGTH);
 
@@ -132,7 +167,7 @@ export async function POST(req: Request) {
     : "";
 
   // Change the system prompt company for your use case
-  const systemPrompt = `You are acting as an Anthropic customer support assistant chatbot inside a chat window on a website. You are chatting with a human user who is asking for help about Anthropic's products and services. When responding to the user, aim to provide concise and helpful responses while maintaining a polite and professional tone.
+  const systemPrompt = `You are acting as a ${BUSINESS_NAME} customer support assistant chatbot inside a chat window on a website. You are chatting with a human user who is asking for help about ${BUSINESS_NAME}'s products and services. When responding to the user, aim to provide concise and helpful responses while maintaining a polite and professional tone.
 
   To help you answer the user's question, we have retrieved the following information for you. It may or may not be relevant (we are using a RAG pipeline to retrieve this information):
   ${isRagWorking ? `${retrievedContext}` : "No information found for this query."}
@@ -141,7 +176,7 @@ export async function POST(req: Request) {
 
   ${categoriesContext}
 
-  If the question is unrelated to Anthropic's products and services, you should redirect the user to a human agent.
+  If the question is unrelated to ${BUSINESS_NAME}'s products and services, you should redirect the user to a human agent.
 
   You are the first point of contact for the user and should try to resolve their issue or provide relevant information. If you are unable to help the user or if the user explicitly asks to talk to a human, you can redirect them to a human agent for further assistance.
   
@@ -211,35 +246,42 @@ export async function POST(req: Request) {
 
   try {
     console.log(`🚀 Query Processing`);
-    measureTime("Claude Generation Start");
+    measureTime("Generation Start");
 
-    const anthropicMessages: Anthropic.MessageParam[] = messages.map(
-      (msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-      }),
-    );
+    const chatMessages = messages.map((msg: any) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
 
-    anthropicMessages.push({
-      role: "assistant",
-      content: "{",
-    });
+    let textContent: string;
+    if (useGroq) {
+      textContent = await generateWithGroq(systemPrompt, chatMessages);
+    } else {
+      const anthropicMessages: Anthropic.MessageParam[] = [
+        ...chatMessages,
+        { role: "assistant", content: "{" },
+      ];
 
-    const response = await client.messages.create({
-      model: model,
-      max_tokens: 1000,
-      messages: anthropicMessages,
-      system: systemPrompt,
-    });
+      const response = await client!.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 1000,
+        messages: anthropicMessages,
+        system: systemPrompt,
+      });
 
-    measureTime("Claude Generation Complete");
+      // Extract text content from the response
+      textContent =
+        "{" +
+        response.content
+          .filter(
+            (block): block is Anthropic.TextBlock => block.type === "text",
+          )
+          .map((block) => block.text)
+          .join(" ");
+    }
+
+    measureTime("Generation Complete");
     console.log("✅ Message generation completed");
-
-    // Extract text content from the response
-    const textContent = "{" + response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join(" ");
 
     // Parse the JSON response
     let parsedResponse;
