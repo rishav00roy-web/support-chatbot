@@ -2,6 +2,10 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["@aws-sdk/client-bedrock-agent-runtime"],
+    // Ship the /knowledge folder with the chat API on Vercel
+    outputFileTracingIncludes: {
+      "/api/chat": ["./knowledge/**/*"],
+    },
   },
   webpack: (config, { isServer }) => {
     if (isServer) {

@@ -7,8 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI Chat Assistant",
-  description: "Chat with an AI assistant powered by Anthropic",
+  title: "Support Assistant | Atelier Systems",
+  description: "An AI support assistant that answers from your own business knowledge",
 };
 
 export default function RootLayout({

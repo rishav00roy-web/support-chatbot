@@ -18,7 +18,6 @@ import {
 import "highlight.js/styles/atom-one-dark.css";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import Image from "next/image";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -233,7 +232,7 @@ const ConversationHeader: React.FC<ConversationHeaderProps> = ({
         <>
           <Avatar className="w-10 h-10 border">
             <AvatarImage
-              src="/ant-logo.svg"
+              src="/assistant.svg"
               alt="AI Assistant Avatar"
               width={40}
               height={40}
@@ -302,7 +301,7 @@ function ChatArea() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showHeader, setShowHeader] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("claude-haiku-4-5-20251001");
+  const [selectedModel, setSelectedModel] = useState("default");
   const [showAvatar, setShowAvatar] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -316,8 +315,7 @@ function ChatArea() {
   ];
 
   const models: Model[] = [
-    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    { id: "default", name: "AI Assistant" },
   ];
 
   const scrollToBottom = () => {
@@ -588,7 +586,7 @@ function ChatArea() {
             <div className="flex flex-col items-center justify-center h-full animate-fade-in-up">
               <Avatar className="w-10 h-10 mb-4 border">
                 <AvatarImage
-                  src="/ant-logo.svg"
+                  src="/assistant.svg"
                   alt="AI Assistant Avatar"
                   width={40}
                   height={40}
@@ -639,7 +637,7 @@ function ChatArea() {
                     {message.role === "assistant" && (
                       <Avatar className="w-8 h-8 mr-2 border">
                         <AvatarImage
-                          src="/ant-logo.svg"
+                          src="/assistant.svg"
                           alt="AI Assistant Avatar"
                         />
                         <AvatarFallback>AI</AvatarFallback>
@@ -691,13 +689,9 @@ function ChatArea() {
           />
           <div className="flex justify-between items-center p-3">
             <div>
-              <Image
-                src="/claude-icon.svg"
-                alt="Claude Icon"
-                width={0}
-                height={14}
-                className="w-auto h-[14px] mt-1"
-              />
+              <span className="text-xs text-muted-foreground">
+                AI can make mistakes. A human can always help.
+              </span>
             </div>
             <Button
               type="submit"
